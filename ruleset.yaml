@@ -1,0 +1,44 @@
+replace:
+  cir: "Circle"
+  st: "Street"
+  pl: "Place"
+  dr: "Drive"
+  ave: "Avenue"
+  ln: "Lane"
+  pkwy: "Parkway"
+  pky: "Parkway"
+  rd: "Road"
+  hwy: "Highway"
+  blvd: "Boulevard"
+  ct: "Court"
+  trl: "Trail"
+  ter: "Terrace"
+
+  n: "North"
+  s: "South"
+  e: "East"
+  w: "West"
+  ne: "North East"
+  nw: "North West"
+  se: "South East"
+  sw: "South West"
+
+remove: "[,.]"
+
+variables:
+  - field: community
+    type: String
+  - field: address
+    type: String
+  - field: city
+    type: ShortString
+  - field: state
+    type: ShortString
+  - field: zip
+    type: ShortString
+  - field: geocode
+    type: LatLong
+    'has missing': True
+
+
+...
