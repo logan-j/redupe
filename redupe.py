@@ -51,14 +51,19 @@ class redupe:
 				if len(line) > 0:
 					cells = re.split('\t', line)
 					try:
-
+						lat = lon = 0.0
+						try:
+							lat = float(cells[6])
+							lon = float(cells[7])
+						except:
+							pass
 						prop = 	{
 									'community': cells[0].encode('ascii'),
 									'address': self.normalize(cells[1]).encode('ascii'),
 									'city': cells[2].encode('ascii'),
 									'state': cells[3].encode('ascii'),
 									'zip': cells[4].encode('ascii'),
-									'geocode': (float(cells[6]), float(cells[7])) 
+									'geocode': (lat, lon) 
 								}
 						properties.append(prop)
 					except Exception as inst:
