@@ -1,4 +1,5 @@
 from geopy.distance import vincenty
+from sets import Set
 import dedupe
 import re
 import sys
@@ -13,11 +14,11 @@ class redupe:
 		self.data, self.ruleset = {}, []
 		
 
-		with open(i_ruleset, "r") as r:
+		with open(i_ruleset, "rb") as r:
 			for rule in yaml.safe_load_all(r):
 				self.ruleset.append(rule)
 
-		with open(i_file, "r") as f:
+		with open(i_file, "rb") as f:
 			len(f.readline().split("\t"))
 		self.get_data(i_file)
 		self.deduper = dedupe.Dedupe(self.ruleset[0]['variables'])
@@ -37,7 +38,7 @@ class redupe:
 
 	def get_data(self, i_file):
 		properties = []
-		with open(i_file, 'r') as f:
+		with open(i_file, 'rb') as f:
 			lines, cleaner = f.readlines()[1:], []
 			for line in lines:
 				line = re.sub('\n(?=\t)', '', line)
@@ -45,10 +46,7 @@ class redupe:
 				line = re.sub('\n{2,}', '', line)
 				cleaner.append(line)
 			conjoined = "".join(cleaner)
-			"""
-			with open("n_" + i_file, "wb") as out:
-				out.write(conjoined)
-			"""
+			
 			for line in conjoined.split("\n"):
 				if len(line) > 0:
 					cells = re.split('\t', line)
@@ -63,8 +61,8 @@ class redupe:
 									'geocode': (float(cells[6]), float(cells[7])) 
 								}
 						properties.append(prop)
-					except:
-						print cells
+					except Exception as inst:
+						sys.stderr.write("\n%s\n" % inst)
 					
 				else:
 					continue
@@ -83,7 +81,7 @@ class redupe:
 
 	def read(self):
 		try:
-			with open('./.training.json', 'r') as f:
+			with open('./.training.json', 'rb') as f:
 				self.deduper.readTraining(f)
 		except:
 			sys.stderr.write("Training File Not Found.\n")
@@ -91,9 +89,9 @@ class redupe:
 
 	def write(self):
 		try:
-			with open('./.training.json', 'w') as f:
+			with open('./.training.json', 'wb') as f:
 				self.deduper.writeTraining(f)
-			with open('./.settings', 'w') as f:
+			with open('./.settings', 'wb') as f:
 				self.deduper.writeSettings(f)
 
 		except Exception as inst:
@@ -112,38 +110,28 @@ def main():
 		action='store_true',
 		help='run the automatic training function after enough training data is stored')
 
-	parser.add_argument('-m', '--match',
-		action='store_true',
-		help='attempt to group the input into address clusters')
-
 	parser.add_argument('infile', 
 		nargs='?',
 		type=str)
+
+	parser.add_argument('outfile',
+		nargs='?',
+		type=argparse.FileType('w'),
+		default=sys.stdout)
+
 
 	args = parser.parse_args()
 
 	remove = redupe("ruleset.yaml", args.infile)
 	remove.run()
 
-	
-	if args.match:
-		with open('./.settings', 'r') as f:
-			deduper = dedupe.StaticDedupe(f)
-
-
-		threshold = deduper.threshold(remove.data, recall_weight=2)
-		duplicates = deduper.match(remove.data, threshold)
-		for item in duplicates:
-			for i in xrange(0, len(item[0])):
-				print item[1][i], remove.data[item[0][i]]
-			print "\n\n------------------------------------\n\n" 
-
+		
 	if args.auto:
 		remove.deduper.train()
 		remove.write()
 
 
-	if args.train:
+	elif args.train:
 		stdscr = curses.initscr()
 
 		curses.noecho()
@@ -196,6 +184,41 @@ def main():
 				break
 
 	else:
-		pass
+		with open('./.settings', 'rb') as f:
+			deduper = dedupe.StaticDedupe(f)
+
+
+		threshold = deduper.threshold(remove.data, recall_weight=2)
+		duplicates = deduper.match(remove.data, threshold)
+
+		d_map = {}
+		for item in duplicates:
+			indices = Set(item[0])
+			for i in xrange(0, len(indices)):
+				g_indices = indices - Set([item[0][i]])
+				out = ''
+				for g in g_indices: out += ("%s: %s " % (g, remove.data[g]['community']))
+				d_map[item[0][i]] = {'conf': item[1][i], 'group': out}
+
+
+		for i in xrange(0, len(remove.data.keys())):
+			address = remove.data[i]['address']
+			city = remove.data[i]['city']
+			state = remove.data[i]['state']
+			zipper = remove.data[i]['zip']
+			comm = remove.data[i]['community']
+			f_address = "%s, %s, %s %s" % (address, city, state, zipper)
+
+			if d_map.has_key(i):
+				args.outfile.write("%s\t%s\t%s\t%s\n" % (comm, f_address, d_map[i]['conf'], d_map[i]['group']))
+			else:
+
+				args.outfile.write("%s\t%s\n" % (comm, f_address))
+		"""
+		for item in duplicates:
+			for i in xrange(0, len(item[0])):
+				print item[1][i], remove.data[item[0][i]]
+			print "\n\n------------------------------------\n\n" 
+		"""
 
 main()
