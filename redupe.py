@@ -1,28 +1,69 @@
 from geopy.distance import vincenty
+from multiprocessing import Pool
 from sets import Set
+from colorama import Fore
+from fuzzywuzzy import fuzz
 import dedupe
 import re
-import sys
+import sys, traceback
 import yaml
 import argparse
 import curses
 
 
+
+
+
 class redupe:
-	def __init__(self, i_ruleset, i_file):
+	def __init__(self, i_ruleset, i_file, manual = False):
 		
+		self.mapping = {}
 		self.data, self.ruleset = {}, []
-		
 
 		with open(i_ruleset, "rb") as r:
 			for rule in yaml.safe_load_all(r):
 				self.ruleset.append(rule)
-
-		with open(i_file, "rb") as f:
-			len(f.readline().split("\t"))
 		self.get_data(i_file)
-		self.deduper = dedupe.Dedupe(self.ruleset[0]['variables'])
-		self.read()
+		
+		if not manual:
+
+			self.deduper = dedupe.Dedupe(self.ruleset[0]['variables'])
+			self.read()
+
+	def concat(self, input):
+		addr = input['address']
+		city = input['city']
+		state = input['state']
+		zipper = input['zip']
+		return ('%s, %s, %s %s' % (addr, city, state, zipper))
+
+	def compare(self, tup):
+		r_comm = fuzz.token_set_ratio(tup[1][0]['community'].lower(), tup[1][1]['community'].lower())
+		r_addr = fuzz.token_set_ratio(self.concat(tup[1][0]).lower(), self.concat(tup[1][1]).lower())
+		comp = False
+		if r_comm >= 95 or r_addr >= 95:
+			comp = True
+
+		elif (r_comm >= 50 or r_addr >= 50) and (tup[1][0]['geocode'] != (0.0, 0.0) and tup[1][1]['geocode'] != (0.0, 0.0)):
+
+			distance = vincenty(tup[1][0]['geocode'], tup[1][1]['geocode']).miles
+			if distance <= 0.4:
+				comp = True
+
+		if comp:
+			if self.mapping.has_key(tup[0][0]):
+				self.mapping[tup[0][1]] = self.mapping[tup[0][0]]
+			else:
+				self.mapping[tup[0][0]] = tup[0][0]
+				self.mapping[tup[0][1]] = tup[0][0]
+
+	def danny_dedupes(self):
+		num = len(self.data)
+		for i in xrange(0, num):
+			sys.stderr.write("Working on: %s of %s\n" % (i + 1, num))
+			for j in xrange(i + 1, num):
+				tup = ((i, j),(self.data[i], self.data[j]))
+				self.compare(tup)
 
 
 	def normalize(self, i_str):
@@ -34,7 +75,7 @@ class redupe:
 				out[i] = self.ruleset[0]['replace'][word.lower()]
 
 		return " ".join(out)
-		
+
 
 	def get_data(self, i_file):
 		properties = []
@@ -58,7 +99,7 @@ class redupe:
 						except:
 							pass
 						prop = 	{
-									'community': cells[0].encode('ascii'),
+									'community': self.normalize(cells[0]).encode('ascii'),
 									'address': self.normalize(cells[1]).encode('ascii'),
 									'city': cells[2].encode('ascii'),
 									'state': cells[3].encode('ascii'),
@@ -67,7 +108,8 @@ class redupe:
 								}
 						properties.append(prop)
 					except Exception as inst:
-						sys.stderr.write("\n%s\n" % inst)
+						sys.stderr.write(Fore.RED + "%s, %s, %s\n" % (sys.exc_info()[0], inst, inst.args) + Fore.RESET)
+						traceback.print_exception(sys.exc_info()[0], sys.exc_info()[1], sys.exc_info()[2])
 					
 				else:
 					continue
@@ -111,6 +153,11 @@ def main():
 		action='store_true',
 		help='run the training program to more accurately remove duplicates')
 
+	parser.add_argument('-m', '--manual',
+		action='store_true',
+		help='run a rule-based version of redupe not based on dedupe/machine learning',
+		default=False)
+
 	parser.add_argument('-a', '--auto',
 		action='store_true',
 		help='run the automatic training function after enough training data is stored')
@@ -127,13 +174,30 @@ def main():
 
 	args = parser.parse_args()
 
-	remove = redupe("ruleset.yaml", args.infile)
-	remove.run()
+	remove = redupe("ruleset.yaml", args.infile, args.manual)
 
-		
-	if args.auto:
+
+	if not args.manual:
+		remove.run()
+
+	if args.manual:
+		remove.danny_dedupes()
+		flag = ''
+		print mapping
+		for i in xrange(0, len(remove.data.keys())):
+			if mapping.has_key(i):
+				w_item = remove.data[mapping[i]]
+				flag = "\t**"
+			else:
+				w_item = remove.data[i]
+				
+			args.outfile.write("%s\t%s%s\n" % (remove.concat(remove.data[i]), remove.concat(w_item), flag))
+			flag = ''
+
+	elif args.auto:
 		remove.deduper.train()
 		remove.write()
+
 
 
 	elif args.train:
