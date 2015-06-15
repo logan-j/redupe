@@ -1,5 +1,4 @@
 from geopy.distance import vincenty
-from multiprocessing import Pool
 from sets import Set
 from colorama import Fore
 from fuzzywuzzy import fuzz
