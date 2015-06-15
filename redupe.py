@@ -182,10 +182,9 @@ def main():
 	if args.manual:
 		remove.danny_dedupes()
 		flag = ''
-		print mapping
 		for i in xrange(0, len(remove.data.keys())):
-			if mapping.has_key(i):
-				w_item = remove.data[mapping[i]]
+			if remove.mapping.has_key(i):
+				w_item = remove.data[remove.mapping[i]]
 				flag = "\t**"
 			else:
 				w_item = remove.data[i]
