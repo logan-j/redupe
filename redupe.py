@@ -185,7 +185,7 @@ def main():
 		for i in xrange(0, len(remove.data.keys())):
 			if remove.mapping.has_key(i):
 				w_item = remove.data[remove.mapping[i]]
-				flag = "\t**"
+				flag = "\t%s" % str(remove.mapping[i] + 1)
 			else:
 				w_item = remove.data[i]
 				
